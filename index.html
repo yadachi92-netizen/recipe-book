@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ふたりのレシピ帳</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="レシピ帳">
+<meta name="theme-color" content="#F1F4F1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101513" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script src="config.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Azeret+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: header with totals + category counter (same frame as 駅間ウォーク), search/sort tools, recent log, recipe card grid, bottom sheet for detail / edit / 作った記録 */
+:root{
+  --bg:#F1F4F1; --surface:#FFFFFF; --ink:#1B2320; --muted:#66716B; --rule:#D7DDD8; --soft:#E8ECE8; --hl:#F6DD7A; --ok:#2F7A52; --warn:#B23A2A; --star:#D99A12;
+  --f-body:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;
+  --f-num:"Azeret Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#101513;--surface:#18201C;--ink:#E6ECE8;--muted:#8E9A93;--rule:#2B3631;--soft:#202A25;--hl:#6A5814;--ok:#5CC48A;--warn:#F07A68;--star:#F2C14E;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#101513;--surface:#18201C;--ink:#E6ECE8;--muted:#8E9A93;--rule:#2B3631;--soft:#202A25;--hl:#6A5814;--ok:#5CC48A;--warn:#F07A68;--star:#F2C14E;color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.wrap{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:20px 120px;display:flex;flex-direction:column;gap:18px}
+header{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:20px;align-items:start}
+@media (max-width:760px){header{grid-template-columns:1fr}}
+.brand h1{margin:0;font-weight:900;font-size:clamp(28px,5vw,40px);letter-spacing:.02em;line-height:1.15;text-wrap:balance}
+.brand p{margin:6px 0 0;color:var(--muted);font-size:13px;max-width:44ch}
+.big{display:flex;align-items:baseline;gap:10px;margin-top:14px;flex-wrap:wrap}
+.big b{font-family:var(--f-num);font-size:clamp(34px,6vw,48px);font-weight:700;line-height:1}
+.big span{color:var(--muted)}
+.big em{font-style:normal;font-family:var(--f-num);font-weight:700;font-size:14px;background:var(--ink);color:var(--bg);padding:3px 9px;border-radius:4px}
+.subst{margin-top:6px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.cos{display:flex;flex-direction:column;gap:2px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px}
+.cos .hd{display:grid;grid-template-columns:8em minmax(0,1fr) 6em;gap:10px;font-size:11px;color:var(--muted);padding:0 8px 2px;letter-spacing:.06em}
+.cos .hd span:last-child{text-align:right}
+.co{display:grid;grid-template-columns:8em minmax(0,1fr) 6em;align-items:center;gap:10px;border:0;background:none;font-size:13px;text-align:left;padding:5px 8px;border-radius:6px;cursor:pointer}
+.co:hover{background:var(--bg)}
+.co[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.co .lb{display:flex;align-items:center;gap:8px;min-width:0}
+.co .dot{width:10px;height:10px;border-radius:50%;background:var(--lc);flex:none}
+.co .bar{height:6px;border-radius:3px;background:var(--rule);overflow:hidden}
+.co .bar i{display:block;height:100%;background:var(--ok)}
+.co[aria-pressed="true"] .bar{background:color-mix(in srgb,var(--bg) 30%,transparent)}
+.co .n{font-family:var(--f-num);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.tools input[type=search]{flex:1 1 220px;min-width:0;padding:9px 12px;border:1px solid var(--rule);border-radius:8px;background:var(--surface)}
+.tools select{padding:9px 10px;border:1px solid var(--rule);border-radius:8px;background:var(--surface)}
+.tools label{font-size:13px;color:var(--muted);display:flex;gap:6px;align-items:center;cursor:pointer}
+.notice{font-size:13px;padding:10px 12px;border-radius:8px;border:1px dashed var(--muted);color:var(--muted)}
+.log{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:12px 14px}
+.log h3,.sec h3{margin:0 0 6px;font-size:12px;letter-spacing:.1em;color:var(--muted);font-weight:700}
+.log ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column}
+.log li{border-top:1px solid var(--rule)}
+.log li:first-child{border-top:0}
+.log li button{width:100%;display:grid;grid-template-columns:5em 10px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13.5px;padding:6px 0;border:0;background:none;text-align:left;cursor:pointer}
+.log li button:hover .t{text-decoration:underline}
+.log .d{font-family:var(--f-num);font-size:12px;color:var(--muted)}
+.log .sw{width:10px;height:10px;border-radius:50%;background:var(--lc)}
+.log .who{color:var(--muted);font-size:12px}
+.log .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stars{color:var(--star);letter-spacing:1px;font-size:12px;white-space:nowrap}
+.empty{color:var(--muted);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:12px;row-gap:6px;align-items:center;text-align:left;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;cursor:pointer}
+.card:hover{border-color:var(--ink)}
+.badge{flex:none;width:34px;height:34px;border-radius:50%;border:4px solid var(--lc);display:grid;place-items:center;font-weight:900;font-size:13px;background:var(--surface);grid-row:span 2;align-self:start}
+.card .thumb{grid-column:3;grid-row:1 / span 2;width:64px;height:64px;border-radius:8px;object-fit:cover;background:var(--soft);align-self:center}
+.card .ttl{font-weight:700;font-size:16px;line-height:1.35;overflow-wrap:anywhere}
+.card .info{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--muted);align-items:center}
+.card .info .num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.pill{font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;border:1px solid var(--rule);color:var(--muted)}
+.pill.made{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+.emptyBig{background:var(--surface);border:1px dashed var(--rule);border-radius:10px;padding:28px 20px;text-align:center;color:var(--muted)}
+.emptyBig b{display:block;color:var(--ink);font-size:17px;margin-bottom:4px}
+mark{background:var(--hl);color:inherit;border-radius:2px}
+/* sheet */
+.scrim{position:fixed;inset:0;z-index:9;background:rgba(8,12,10,.45)}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:10;max-height:88vh;overflow-y:auto;overflow-x:hidden;background:var(--surface);border-top:1px solid var(--rule);border-radius:14px 14px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.2);padding:14px 16px calc(18px + env(safe-area-inset-bottom,0px))}
+.sheet .in{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.sh-top{display:flex;align-items:flex-start;gap:12px}
+.sh-top .badge{grid-row:auto}
+.sh-top .ttl{min-width:0;flex:1}
+.sh-top .ttl div{font-size:21px;font-weight:900;line-height:1.3;overflow-wrap:anywhere}
+.sh-top .ttl small{color:var(--muted);font-size:12px}
+.x{border:1px solid var(--rule);background:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:15px;flex:none}
+.state{font-size:13px;font-weight:700;color:var(--muted)}
+.state.on{color:var(--ok)}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:18px}
+@media (max-width:640px){.cols{grid-template-columns:1fr}}
+.sec{min-width:0}
+.ings{margin:0;padding:0;list-style:none}
+.ings li{display:flex;align-items:baseline;gap:6px;padding:4px 0;border-bottom:1px dotted var(--rule);font-size:14px}
+.ings li .lead{flex:1;min-width:8px}
+.ings li .amt{font-family:var(--f-num);font-size:13px;white-space:nowrap}
+.ings li.hdr{font-weight:700;border-bottom:0;padding-top:8px;font-size:13px}
+.steps{margin:0;padding:0;list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:8px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;font-size:14px;line-height:1.65}
+.steps li::before{content:counter(s);font-family:var(--f-num);font-weight:700;font-size:12px;width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--surface);display:grid;place-items:center;margin-top:1px}
+.steps li.shdr{counter-increment:none;display:block;font-weight:700;font-size:13px;padding-top:4px}
+.steps li.shdr::before{content:none}
+.memo{white-space:pre-wrap;font-size:14px;background:var(--soft);border-radius:8px;padding:10px 12px;overflow-wrap:anywhere}
+.src{font-size:13px;overflow-wrap:anywhere}
+.src a{color:var(--ok)}
+.hist{margin:0;padding:0;list-style:none}
+.hist li{display:grid;grid-template-columns:6.5em minmax(0,1fr) auto;gap:8px;align-items:start;padding:6px 0;border-top:1px solid var(--rule);font-size:13.5px}
+.hist li:first-child{border-top:0}
+.hist .d{font-family:var(--f-num);font-size:12px;color:var(--muted);padding-top:2px}
+.hist .who{color:var(--muted);font-size:12px}
+.hist .nt{white-space:pre-wrap;overflow-wrap:anywhere}
+.mini{border:1px solid var(--rule);background:none;border-radius:6px;font-size:12px;padding:2px 8px;cursor:pointer;color:var(--muted);white-space:nowrap}
+.mini.arm{border-color:var(--warn);color:var(--warn)}
+.form{display:flex;flex-direction:column;gap:10px}
+.f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.f label,.flab{font-size:12px;color:var(--muted)}
+.f input,.f select,.f textarea{padding:8px 10px;border:1px solid var(--rule);border-radius:8px;background:var(--bg);width:100%}
+.f textarea{resize:vertical;min-height:70px;line-height:1.6}
+.f .hint{font-size:11.5px;color:var(--muted)}
+.frow{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule);background:var(--bg);border-radius:999px;padding:3px 10px 3px 4px;font-size:13px;cursor:pointer}
+.chip.np{padding:4px 12px}
+.chip img{width:22px;height:22px;border-radius:50%;background:var(--rule)}
+.chip[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--bg)}
+.btns{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{font-weight:700;border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--bg)}
+.btn.ghost{background:none;color:var(--ink);border-color:var(--rule)}
+.btn.warn{background:none;color:var(--warn);border-color:var(--warn);margin-left:auto}
+.btn:disabled{opacity:.5;cursor:default}
+.msg{font-size:12px;color:var(--muted);min-height:1em}
+footer{font-size:12px;color:var(--muted);line-height:1.7}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(20px);opacity:.6}}}
+.sync{font-size:12px;color:var(--muted)}
+.hero{display:block;width:100%;max-width:100%;max-height:min(52vh,420px);object-fit:cover;border-radius:10px;background:var(--soft)}
+.pfield{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.pprev{width:120px;height:90px;object-fit:cover;border-radius:8px;background:var(--soft)}
+.pempty{width:120px;height:90px;border-radius:8px;border:1px dashed var(--rule);display:grid;place-items:center;font-size:12px;color:var(--muted)}
+.vh{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none}
+.vh:focus-visible+.pfield label.btn{outline:2px solid var(--ink);outline-offset:2px}
+label.btn{display:inline-block}
+.reader{background:var(--soft);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.reader .rh{font-size:13px;font-weight:700}
+.reader .rh small{font-weight:500;color:var(--muted);margin-left:6px}
+.reader .rrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.reader input[type=url]{flex:1 1 200px;min-width:0;padding:8px 10px;border:1px solid var(--rule);border-radius:8px;background:var(--surface)}
+.reader .btn{padding:8px 14px}
+.reader textarea{width:100%;min-height:64px;resize:vertical;padding:8px 10px;border:1px solid var(--rule);border-radius:8px;background:var(--surface);line-height:1.5}
+.reader details summary{cursor:pointer;font-size:13px;font-weight:700;padding:2px 0}
+.reader details[open] summary{margin-bottom:6px}
+.rmsg{font-size:12.5px;color:var(--muted);min-height:1em}
+.rmsg.err{color:var(--warn)}
+.rmsg.ok{color:var(--ok)}
+.filled{animation:fl 1.2s ease-out}
+@keyframes fl{from{background:var(--hl)}}
+@media (prefers-reduced-motion:reduce){.filled{animation:none}}
+.addname{display:flex;gap:6px;align-items:center}
+.addname input{width:9em;padding:4px 10px;border:1px solid var(--rule);border-radius:999px;background:var(--bg);font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>ふたりのレシピ帳</h1>
+      <p>ふたりで作った料理と、作ってみたい料理の記録。カードを開いて「作った！」を押すと、日付と作った人が残ります。記録はスプレッドシートに保存されます。</p>
+      <div class="big"><b id="tR">0</b><span>品</span><em id="tM">作った 0 回</em></div>
+      <div class="subst" id="tSub">作ったことがあるのは 0 品・今月 0 回</div>
+    </div>
+    <div class="cos" id="cos" role="group" aria-label="種類で絞り込み"></div>
+  </header>
+
+  <div class="tools">
+    <button class="btn" id="addBtn" type="button" disabled>＋ レシピを追加</button>
+    <input type="search" id="q" placeholder="料理名・材料で探す（例：鶏もも）" aria-label="料理名・材料で探す">
+    <select id="sort" aria-label="並び順">
+      <option value="recent">最近作った順</option>
+      <option value="often">よく作る順</option>
+      <option value="added">追加した順</option>
+      <option value="name">名前順</option>
+    </select>
+    <label><input type="checkbox" id="onlyNew"> まだ作っていないものだけ</label>
+    <span class="sync" id="sync"></span>
+  </div>
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="log">
+    <h3>最近作った料理</h3>
+    <ol id="log"></ol>
+    <div class="empty" id="logEmpty">まだ記録がありません。レシピを開いて「作った！と記録」を押すと、ここに並びます。</div>
+  </section>
+
+  <div class="grid" id="grid"></div>
+  <div class="emptyBig" id="gridEmpty"><b>まだレシピがありません</b>「＋ レシピを追加」から、よく作る1品を登録してみてください。</div>
+
+  <footer>材料は1行に1つ、「鶏もも肉 300g」のように名前と分量をスペースで区切ると、分量が右にそろいます。「■ たれ」のように ■ で始まる行は小見出しになります。</footer>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="shTitle"><div class="in" id="shIn"></div></div>
+
+<script>
+const CATS=[['主菜','主','#C8553D'],['副菜','副','#3F8F55'],['汁物','汁','#C38F12'],['ごはん・麺','飯','#8A6440'],['お菓子','甘','#B5508A'],['その他','他','#4F74A6']];
+const catOf=n=>CATS.find(c=>c[0]===n)||CATS[5];
+const $=id=>document.getElementById(id);
+let recipes=new Map(), cooks=new Map(), byR=new Map(), filterCat=null, busy=false, online=false, extraNames=[];
+let sel=null, mode='view', pick=new Set(), rate=0, armed=null, pNew=null, pRemove=false;
+const purl=(id,w)=>'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w'+w;
+async function shrink(file,max){const own=typeof file!=='string', url=own?URL.createObjectURL(file):file;
+  try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('img'));i.src=url});
+    const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+    const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*s);c.height=Math.round(img.naturalHeight*s);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.82)}
+  finally{if(own)URL.revokeObjectURL(url)}}
+
+function h(t,a,...k){const e=document.createElement(t);
+  if(a)for(const[x,v]of Object.entries(a)){if(v==null||v===false)continue;
+    if(x.startsWith('on'))e[x]=v;else if(x==='class')e.className=v;else if(x==='style')e.style.cssText=v;else e.setAttribute(x,v===true?'':String(v))}
+  k.flat(9).forEach(c=>{if(c==null||c===false)return;e.append(c.nodeType?c:String(c))});return e}
+const today=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const ck=c=>(c.date||'')+(c.at||'');
+const md=d=>d?d.slice(5).replace('-','/'):'';
+const norm=s=>String(s||'').toLowerCase().replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/\s+/g,'');
+const stars=n=>n?'★'.repeat(n)+'☆'.repeat(3-n):'';
+const lines=s=>String(s||'').split('\n').map(x=>x.trim()).filter(Boolean);
+const splitWho=s=>String(s||'').split(/[、,，]/).map(x=>x.trim()).filter(Boolean);
+function knownNames(){const s=new Set(extraNames);cooks.forEach(c=>splitWho(c.who).forEach(n=>s.add(n)));return [...s]}
+
+// ---------- サーバー呼び出し（Google Apps Script） ----------
+const API_URL=(window.API_URL||'').trim();
+async function api(fn,...args){
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(API_URL))throw new Error('nourl');
+  let r;
+  try{
+    if(fn==='getAll')r=await fetch(API_URL+'?action=list&t='+Date.now(),{cache:'no-store'});
+    else r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:fn,args})});
+  }catch(e){throw new Error('通信できませんでした。電波を確認してください')}
+  let j;try{j=await r.json()}catch(e){throw new Error('保存先から正しい返事がありません。Code.gs を貼り替えて新バージョンでデプロイしたか確認してください')}
+  if(!j.ok)throw new Error(j.error||'error');
+  return j.result;
+}
+function errText(e){const m=String(e&&e.message||e||'');
+  return m==='nourl'?'保存先が設定されていません（config.js）。':'保存できませんでした（'+m.slice(0,120)+'）'}
+function apply(data){if(!data)return;
+  recipes=new Map((data.recipes||[]).map(r=>[r.id,r]));
+  cooks=new Map((data.cooks||[]).map(c=>[c.id,c]));
+  const d=new Date();$('sync').textContent=`${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')} に更新`;
+  render()}
+async function load(){if(busy)return;
+  try{const d=await api('getAll');if(!busy&&mode==='view')apply(d);online=true;$('addBtn').disabled=false;$('notice').hidden=true}
+  catch(e){$('notice').hidden=false;$('notice').textContent=e.message==='nourl'?'保存先が設定されていません。config.js にウェブアプリのURL（/exec）を入れてください。':'レシピを読み込めませんでした（'+String(e.message).slice(0,100)+'）。開き直してください。'}}
+
+// ---------- 一覧 ----------
+function groupCooks(){byR=new Map();cooks.forEach(c=>{if(!recipes.has(c.rid))return;if(!byR.has(c.rid))byR.set(c.rid,[]);byR.get(c.rid).push(c)});
+  byR.forEach(a=>a.sort((x,y)=>ck(y).localeCompare(ck(x))))}
+function avgRate(list){const r=list.filter(c=>c.rate>0);return r.length?Math.round(r.reduce((s,c)=>s+c.rate,0)/r.length):0}
+
+function render(){
+  groupCooks();
+  const all=[...recipes.entries()];
+  const total=[...byR.values()].reduce((s,a)=>s+a.length,0);
+  const ym=today().slice(0,7);
+  const month=[...byR.values()].flat().filter(c=>(c.date||'').startsWith(ym)).length;
+  $('tR').textContent=all.length;$('tM').textContent=`作った ${total} 回`;
+  $('tSub').textContent=`作ったことがあるのは ${byR.size} 品・今月 ${month} 回`;
+  const cos=$('cos');cos.replaceChildren(h('div',{class:'hd'},h('span',null,'種類'),h('span',null,'作ったことがある割合'),h('span',null,'作った/全部')));
+  CATS.forEach(([n,,col])=>{const rs=all.filter(([,r])=>catOf(r.cat)[0]===n), made=rs.filter(([id])=>byR.has(id)).length;
+    const pct=rs.length?made/rs.length*100:0;
+    cos.append(h('button',{type:'button',class:'co','aria-pressed':String(filterCat===n),style:`--lc:${col}`,onclick:()=>{filterCat=filterCat===n?null:n;render()}},
+      h('span',{class:'lb'},h('span',{class:'dot'}),n),h('span',{class:'bar'},h('i',{style:`width:${pct}%`})),h('span',{class:'n'},`${made}/${rs.length}`)))});
+  const q=norm($('q').value), only=$('onlyNew').checked, sort=$('sort').value;
+  let list=all.filter(([id,r])=>(!filterCat||catOf(r.cat)[0]===filterCat)&&(!only||!byR.has(id))&&(!q||norm(r.title).includes(q)||norm(r.ings).includes(q)));
+  const last=id=>byR.has(id)?ck(byR.get(id)[0]):'';
+  const added=r=>(r.created||'')+(r.at||'');
+  list.sort((a,b)=>sort==='name'?String(a[1].title).localeCompare(String(b[1].title),'ja'):
+    sort==='often'?((byR.get(b[0])||[]).length-(byR.get(a[0])||[]).length)||last(b[0]).localeCompare(last(a[0])):
+    sort==='added'?added(b[1]).localeCompare(added(a[1])):
+    last(b[0]).localeCompare(last(a[0]))||added(b[1]).localeCompare(added(a[1])));
+  $('grid').replaceChildren(...list.map(([id,r])=>card(id,r)));
+  const ge=$('gridEmpty');ge.hidden=list.length>0;
+  ge.replaceChildren(...(all.length?[h('b',null,'条件に合うレシピがありません'),'検索語や絞り込みを外してみてください。']:[h('b',null,'まだレシピがありません'),'「＋ レシピを追加」から、よく作る1品を登録してみてください。']));
+  renderLog();
+  if(sel&&mode==='view'){if(recipes.has(sel))renderSheet();else closeSheet()}
+}
+function card(id,r){const c=catOf(r.cat), cs=byR.get(id)||[], av=avgRate(cs);
+  const info=[];
+  if(r.time)info.push(h('span',null,h('span',{class:'num'},r.time),'分'));
+  if(r.serves)info.push(h('span',null,h('span',{class:'num'},r.serves),'人分'));
+  info.push(cs.length?h('span',{class:'pill made'},`${cs.length}回`):h('span',{class:'pill'},'まだ'));
+  if(cs.length)info.push(h('span',null,'最後 ',h('span',{class:'num'},md(cs[0].date))));
+  if(av)info.push(h('span',{class:'stars','aria-label':`おいしさ ${av}/3`},stars(av)));
+  return h('button',{type:'button',class:'card',style:`--lc:${c[2]}`,onclick:()=>openSheet(id)},
+    h('span',{class:'badge','aria-hidden':'true'},c[1]),h('span',{class:'ttl'},r.title||'（名前なし）'),h('span',{class:'info'},info),
+    r.photo?h('img',{class:'thumb',src:purl(r.photo,300),alt:'',loading:'lazy',onerror:e=>e.target.remove()}):null)}
+function renderLog(){
+  const rows=[...byR.values()].flat().sort((a,b)=>ck(b).localeCompare(ck(a))).slice(0,8);
+  $('logEmpty').hidden=rows.length>0;
+  $('log').replaceChildren(...rows.map(c=>{const r=recipes.get(c.rid), cat=catOf(r.cat), who=splitWho(c.who).join('・');
+    return h('li',{style:`--lc:${cat[2]}`},h('button',{type:'button',onclick:()=>openSheet(c.rid)},
+      h('span',{class:'d'},md(c.date)),h('span',{class:'sw'}),
+      h('span',{class:'t'},r.title,who?h('span',{class:'who'},'　'+who):null),
+      h('span',{class:'stars'},stars(c.rate))))}));
+}
+
+// ---------- シート ----------
+function openSheet(id){sel=id;mode='view';armed=null;renderSheet();show()}
+function openNew(){sel=null;mode='edit';armed=null;pNew=null;pRemove=false;renderSheet();show();setTimeout(()=>$('fT')&&$('fT').focus(),50)}
+function show(){$('sheet').hidden=false;$('scrim').hidden=false;$('sheet').scrollTop=0}
+function closeSheet(){$('sheet').hidden=true;$('scrim').hidden=true;sel=null;mode='view'}
+$('scrim').onclick=closeSheet;
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('sheet').hidden)closeSheet()});
+$('addBtn').onclick=openNew;
+['q','sort','onlyNew'].forEach(i=>$(i).addEventListener(i==='q'?'input':'change',render));
+
+function sheetTop(r,sub){const c=catOf(r&&r.cat);
+  return h('div',{class:'sh-top'},h('span',{class:'badge',style:`--lc:${c[2]}`,'aria-hidden':'true'},c[1]),
+    h('div',{class:'ttl'},h('div',{id:'shTitle'},r?r.title||'（名前なし）':'新しいレシピ'),h('small',null,sub)),
+    h('button',{class:'x',type:'button','aria-label':'閉じる',onclick:closeSheet},'✕'))}
+function renderSheet(){const box=$('shIn');
+  if(mode==='edit')return box.replaceChildren(...editView());
+  if(mode==='cook')return box.replaceChildren(...cookView());
+  box.replaceChildren(...detailView())}
+
+function ingList(s){return h('ul',{class:'ings'},lines(s).map(l=>{
+  if(/^[■□●◆【]/.test(l))return h('li',{class:'hdr'},l.replace(/^[■□●◆]\s*/,''));
+  const m=l.match(/^(.+?)[\s　]+([^\s　]+)$/);
+  return m?h('li',null,h('span',null,m[1]),h('span',{class:'lead'}),h('span',{class:'amt'},m[2])):h('li',null,l)}))}
+
+function detailView(){const r=recipes.get(sel), cs=byR.get(sel)||[], c=catOf(r.cat);
+  const sub=[c[0],r.time?`${r.time}分`:'',r.serves?`${r.serves}人分`:''].filter(Boolean).join('・');
+  const out=[sheetTop(r,sub),
+    h('div',{class:'state'+(cs.length?' on':'')},cs.length?`作った ${cs.length} 回・最後 ${cs[0].date||'日付なし'}`:'まだ作っていないレシピ'),
+    h('div',{class:'btns'},
+      h('button',{class:'btn',type:'button',disabled:!online,onclick:()=>{mode='cook';pick=new Set(cs.length?splitWho(cs[0].who):knownNames());rate=0;renderSheet()}},'作った！と記録'),
+      h('button',{class:'btn ghost',type:'button',disabled:!online,onclick:()=>{mode='edit';armed=null;pNew=null;pRemove=false;renderSheet()}},'編集'))];
+  if(r.photo)out.splice(1,0,h('img',{class:'hero',src:purl(r.photo,1200),alt:(r.title||'料理')+'の写真',onerror:e=>e.target.remove()}));
+  const ings=lines(r.ings), steps=lines(r.steps);
+  if(ings.length||steps.length)out.push(h('div',{class:'cols'},
+    h('div',{class:'sec'},h('h3',null,'材料'+(r.serves?`（${r.serves}人分）`:'')),ings.length?ingList(r.ings):h('div',{class:'empty'},'未入力')),
+    h('div',{class:'sec'},h('h3',null,'作り方'),steps.length?h('ol',{class:'steps'},steps.map(s=>/^[■□]/.test(s)?h('li',{class:'shdr'},s.replace(/^[■□]\s*/,'')):h('li',null,h('span',null,s)))):h('div',{class:'empty'},'未入力'))));
+  if(r.memo)out.push(h('div',{class:'sec'},h('h3',null,'メモ'),h('div',{class:'memo'},r.memo)));
+  if(/^https?:\/\//i.test(r.url||''))out.push(h('div',{class:'src'},'参考：',h('a',{href:r.url,target:'_blank',rel:'noopener'},r.url)));
+  out.push(h('div',{class:'sec'},h('h3',null,'作った記録'),cs.length?h('ol',{class:'hist'},cs.map(x=>h('li',null,
+    h('span',{class:'d'},x.date||''),
+    h('span',null,x.who?h('span',{class:'who'},splitWho(x.who).join('・')+'　'):null,h('span',{class:'stars'},stars(x.rate)),x.note?h('div',{class:'nt'},x.note):null),
+    online?h('button',{class:'mini'+(armed===x.id?' arm':''),type:'button',onclick:()=>delCook(x.id)},armed===x.id?'本当に消す':'消す'):h('span')))):
+    h('div',{class:'empty'},'まだありません。作ったら「作った！と記録」を押してください。')));
+  out.push(h('div',{class:'msg',id:'shM'}));
+  return out}
+
+function cookView(){const r=recipes.get(sel);
+  const chipWrap=h('div',{class:'chips'});
+  const drawChips=()=>{const names=[...new Set([...knownNames(),...pick])];
+    chipWrap.replaceChildren(...names.map(n=>h('button',{type:'button',class:'chip np','aria-pressed':String(pick.has(n)),
+      onclick:e=>{pick.has(n)?pick.delete(n):pick.add(n);e.currentTarget.setAttribute('aria-pressed',String(pick.has(n)))}},n)),
+      h('span',{class:'addname'},h('input',{id:'cAdd',maxlength:20,placeholder:'名前を追加','aria-label':'名前を追加',
+        onkeydown:e=>{if(e.key==='Enter'){e.preventDefault();addName()}}}),h('button',{type:'button',class:'mini',onclick:addName},'追加')))};
+  const addName=()=>{const v=$('cAdd').value.replace(/[、,，]/g,'').trim();if(!v)return;if(!extraNames.includes(v))extraNames.push(v);pick.add(v);drawChips();$('cAdd').focus()};
+  drawChips();
+  const starWrap=h('div',{class:'chips'});
+  const drawStars=()=>starWrap.replaceChildren(...[[1,'★ ふつう'],[2,'★★ おいしい'],[3,'★★★ 定番にしたい']].map(([v,t])=>
+    h('button',{type:'button',class:'chip np','aria-pressed':String(rate===v),onclick:()=>{rate=rate===v?0:v;drawStars()}},t)));
+  drawStars();
+  return [sheetTop(r,'作った記録をつける'),
+    h('div',{class:'form'},
+      h('div',{class:'f',style:'max-width:200px'},h('label',{for:'cD'},'作った日'),h('input',{type:'date',id:'cD',value:today()})),
+      h('div',{class:'f'},h('span',{class:'flab'},'作った人'),chipWrap),
+      h('div',{class:'f'},h('span',{class:'flab'},'おいしさ（任意）'),starWrap),
+      h('div',{class:'f'},h('label',{for:'cN'},'ひとこと'),h('textarea',{id:'cN',placeholder:'塩を少し減らした、次は倍量で など',maxlength:500,style:'min-height:56px'})),
+      h('div',{class:'btns'},h('button',{class:'btn',type:'button',id:'cSave',onclick:saveCook},'記録する'),h('button',{class:'btn ghost',type:'button',onclick:()=>{mode='view';renderSheet()}},'やめる')),
+      h('div',{class:'msg',id:'shM'}))]}
+
+function editView(){const r=sel?recipes.get(sel):{cat:filterCat||'主菜'};
+  const opt=CATS.map(c=>h('option',{value:c[0],selected:catOf(r.cat)[0]===c[0]},c[0]));
+  const pv=h('div',{class:'pfield'});
+  const drawP=()=>{const src=pNew||(!pRemove&&r.photo?purl(r.photo,600):null);
+    pv.replaceChildren(src?h('img',{src,alt:'料理の写真',class:'pprev'}):h('div',{class:'pempty'},'写真なし'),
+      h('div',{class:'btns'},h('label',{class:'btn ghost',for:'fPh'},src?'写真を変える':'写真を選ぶ'),
+        src?h('button',{type:'button',class:'btn ghost',onclick:()=>{pNew=null;pRemove=true;drawP()}},'写真を外す'):null))};
+  drawP();
+  const fileIn=h('input',{type:'file',id:'fPh',accept:'image/*',class:'vh',onchange:async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;
+    $('shM').textContent='写真を読み込み中…';
+    try{pNew=await shrink(f,1280);pRemove=false;$('shM').textContent=''}catch(err){$('shM').textContent='この写真は読み込めませんでした。別の写真を選んでください。'}
+    e.target.value='';drawP()}});
+  fileIn.addEventListener('redraw',drawP);
+  return [sheetTop(sel?r:null,sel?'レシピを編集':'料理名だけでも登録できます'),
+    h('form',{class:'form',id:'fForm',onsubmit:e=>{e.preventDefault();saveRecipe()}},
+      readerBox(),
+      h('div',{class:'f'},h('label',{for:'fT'},'料理名'),h('input',{id:'fT',required:true,maxlength:80,value:r.title||'',placeholder:'例：鶏もも肉の照り焼き'})),
+      h('div',{class:'f'},h('span',{class:'flab'},'写真'),fileIn,pv),
+      h('div',{class:'frow'},
+        h('div',{class:'f'},h('label',{for:'fC'},'種類'),h('select',{id:'fC'},opt)),
+        h('div',{class:'f'},h('label',{for:'fM'},'時間（分）'),h('input',{id:'fM',type:'number',min:0,max:999,inputmode:'numeric',value:r.time||''})),
+        h('div',{class:'f'},h('label',{for:'fS'},'何人分'),h('input',{id:'fS',type:'number',min:0,max:99,inputmode:'numeric',value:r.serves||''}))),
+      h('div',{class:'f'},h('label',{for:'fI'},'材料'),h('textarea',{id:'fI',rows:6,maxlength:4000,placeholder:'鶏もも肉 1枚\n■ たれ\nしょうゆ 大さじ2\nみりん 大さじ2'},r.ings||''),h('span',{class:'hint'},'1行に1つ。名前と分量はスペースで区切ります。')),
+      h('div',{class:'f'},h('label',{for:'fP'},'作り方'),h('textarea',{id:'fP',rows:6,maxlength:6000,placeholder:'鶏肉の皮目をフォークで刺す\n皮目から中火で7分焼く\nたれを入れて煮からめる'},r.steps||''),h('span',{class:'hint'},'1行が1手順。番号は自動でつきます。')),
+      h('div',{class:'f'},h('label',{for:'fN'},'メモ'),h('textarea',{id:'fN',rows:2,maxlength:2000,placeholder:'コツ、アレンジ、合う献立など'},r.memo||'')),
+      h('div',{class:'f'},h('label',{for:'fU'},'参考にしたページ（URL）'),h('input',{id:'fU',type:'url',maxlength:500,value:r.url||'',placeholder:'https://'})),
+      h('div',{class:'btns'},
+        h('button',{class:'btn',type:'submit',id:'fSave'},sel?'保存する':'登録する'),
+        h('button',{class:'btn ghost',type:'button',onclick:()=>{if(sel){mode='view';renderSheet()}else closeSheet()}},'やめる'),
+        sel?h('button',{class:'btn warn',type:'button',id:'fDel',onclick:delRecipe},'このレシピを削除'):null),
+      h('div',{class:'msg',id:'shM'}))]}
+
+// ---------- 自動読み取り ----------
+let reading=false;
+function readerBox(){
+  const photoIn=h('input',{type:'file',id:'rPh',accept:'image/*',multiple:true,class:'vh',onchange:async e=>{
+    const fs=[...(e.target.files||[])].slice(0,5);e.target.value='';if(!fs.length)return;
+    rmsg(fs.length>1?`写真${fs.length}枚を準備中…`:'写真を準備中…');
+    const list=[];for(const f of fs){try{list.push((await shrink(f,1400)).split(',')[1])}catch(err){}}
+    if(!list.length){rmsg('この写真は読み込めませんでした。別の写真を選んでください。','err');return}
+    readWith('readRecipePhotos',list,(list.length>1?`写真${list.length}枚`:'写真')+'を読み取り中…（10〜30秒ほどかかります）')}});
+  return h('div',{class:'reader'},
+    h('div',{class:'rh'},'自動で読み取る',h('small',null,'読み取った内容は下の欄に入ります。直してから保存してください')),
+    h('div',{class:'rrow'},h('input',{type:'url',id:'rUrl',placeholder:'レシピのページのURLを貼る','aria-label':'レシピのページのURL',
+        onkeydown:e=>{if(e.key==='Enter'){e.preventDefault();readUrl()}}}),
+      h('button',{type:'button',class:'btn ghost',id:'rUrlB',onclick:readUrl},'URLから読む')),
+    h('div',{class:'rrow'},photoIn,h('label',{class:'btn ghost',for:'rPh',id:'rPhB'},'写真から読む'),
+      h('span',{class:'rmsg'},'5枚までまとめて選べます。レシピ本・メモ・インスタのスクショ・料理の写真')),
+    h('details',null,h('summary',null,'文章を貼って読む（インスタのキャプションなど）'),
+      h('div',{class:'rrow'},h('textarea',{id:'rTxt',maxlength:20000,placeholder:'投稿の説明文をコピーして、ここに貼り付けます','aria-label':'レシピの文章'}),
+        h('button',{type:'button',class:'btn ghost',id:'rTxtB',onclick:readText},'文章から読む'))),
+    h('div',{class:'rmsg',id:'rM','aria-live':'polite'}))}
+function readText(){const v=$('rTxt').value.trim();if(v.length<10){rmsg('レシピの部分の文章を貼り付けてください。','err');return}
+  readWith('readRecipeText',v,'文章を読み取り中…')}
+function rmsg(s,cls){const m=$('rM');if(m){m.textContent=s;m.className='rmsg'+(cls?' '+cls:'')}}
+function readUrl(){const u=$('rUrl').value.trim();if(!/^https?:\/\//i.test(u)){rmsg('https:// で始まるURLを貼ってください。','err');return}
+  readWith('readRecipeUrl',u,'ページを読み取り中…')}
+async function readWith(fn,arg,msg){if(reading)return;reading=true;
+  ['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=true));rmsg(msg);
+  try{const r=await api(fn,arg);if(mode!=='edit')return;fillForm(r);
+    rmsg(r.source==='page'?'ページのレシピ情報を読み取りました。内容を確認してください。':'AIで読み取りました。分量などが合っているか確認してください。','ok')}
+  catch(e){rmsg(e.message==='nourl'?'保存先が設定されていません（config.js）。':'読み取れませんでした（'+String(e&&e.message||e).slice(0,120)+'）','err')}
+  finally{reading=false;['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=false))}}
+async function fillForm(r){
+  const set=(id,v)=>{const el=$(id);if(el&&v){el.value=v;el.classList.remove('filled');void el.offsetWidth;el.classList.add('filled')}};
+  set('fT',r.title);set('fM',r.time);set('fS',r.serves);set('fI',r.ings);set('fP',r.steps);set('fU',r.url);
+  if(r.cat&&$('fC'))set('fC',r.cat);
+  if(r.memo){const m=$('fN');set('fN',m.value.trim()?m.value.trim()+'\n'+r.memo:r.memo)}
+  if(r.image&&!pNew&&!(sel&&recipes.get(sel)&&recipes.get(sel).photo&&!pRemove)){
+    try{pNew=await shrink(r.image,1280);pRemove=false;$('fPh')&&$('fPh').dispatchEvent(new Event('redraw'))}catch(e){}}
+}
+
+// ---------- 保存 ----------
+async function run(btn,fn,args,after){btn.disabled=true;$('shM').textContent=args[0]&&args[0].photoData?'写真を保存中…（少しかかります）':'保存中…';busy=true;
+  try{const d=await api(fn,...args);busy=false;after&&after(d);apply(d)}
+  catch(e){busy=false;btn.disabled=false;$('shM').textContent=errText(e)}}
+function saveRecipe(){const t=$('fT').value.trim();if(!t){$('shM').textContent='料理名を入れてください。';return}
+  const rec={id:sel||'',title:t,cat:$('fC').value,time:$('fM').value,serves:$('fS').value,ings:$('fI').value.trim(),steps:$('fP').value.trim(),memo:$('fN').value.trim(),url:$('fU').value.trim(),photoData:pNew?pNew.split(',')[1]:'',photoRemove:pRemove};
+  run($('fSave'),'saveRecipe',[rec],d=>{sel=d.savedId||sel;mode='view';pNew=null;pRemove=false})}
+function saveCook(){if(!sel)return;
+  run($('cSave'),'addCook',[{rid:sel,date:$('cD').value||today(),who:[...pick].join('、'),rate:rate||0,note:$('cN').value.trim().slice(0,500)}],()=>{mode='view'})}
+function delCook(id){if(armed!==id){armed=id;renderSheet();return}
+  armed=null;const b=document.querySelector('.mini.arm')||document.createElement('button');run(b,'deleteCook',[id])}
+function delRecipe(){const b=$('fDel');if(armed!=='recipe'){armed='recipe';b.textContent='本当に削除する（記録も消えます）';return}
+  run(b,'deleteRecipe',[sel],()=>closeSheet())}
+
+// ---------- 起動 ----------
+render();load();
+setInterval(()=>{if(!document.hidden&&mode==='view')load()},30000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&mode==='view')load()});
+</script>
+</body>
+</html>
