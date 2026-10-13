@@ -218,11 +218,11 @@ const $=id=>document.getElementById(id);
 let recipes=new Map(), cooks=new Map(), byR=new Map(), filterCat=null, busy=false, online=false, extraNames=[];
 let sel=null, mode='view', pick=new Set(), rate=0, armed=null, pNew=null, pRemove=false;
 const purl=(id,w)=>'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w'+w;
-async function shrink(file,max){const own=typeof file!=='string', url=own?URL.createObjectURL(file):file;
+async function shrink(file,max,q){const own=typeof file!=='string', url=own?URL.createObjectURL(file):file;
   try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('img'));i.src=url});
     const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
     const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*s);c.height=Math.round(img.naturalHeight*s);
-    c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.82)}
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q||0.82)}
   finally{if(own)URL.revokeObjectURL(url)}}
 
 function h(t,a,...k){const e=document.createElement(t);
@@ -420,7 +420,7 @@ function readerBox(){
   const photoIn=h('input',{type:'file',id:'rPh',accept:'image/*',multiple:true,class:'vh',onchange:async e=>{
     const fs=[...(e.target.files||[])].slice(0,5);e.target.value='';if(!fs.length)return;
     rmsg(fs.length>1?`写真${fs.length}枚を準備中…`:'写真を準備中…');
-    const list=[];for(const f of fs){try{list.push((await shrink(f,1400)).split(',')[1])}catch(err){}}
+    const list=[];for(const f of fs){try{list.push((await shrink(f,fs.length>3?1800:2400,0.9)).split(',')[1])}catch(err){}}
     if(!list.length){rmsg('この写真は読み込めませんでした。別の写真を選んでください。','err');return}
     readWith('readRecipePhotos',list,(list.length>1?`写真${list.length}枚`:'写真')+'を読み取り中…（10〜30秒ほどかかります）')}});
   return h('div',{class:'reader'},
