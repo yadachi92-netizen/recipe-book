@@ -218,12 +218,20 @@ const $=id=>document.getElementById(id);
 let recipes=new Map(), cooks=new Map(), byR=new Map(), filterCat=null, busy=false, online=false, extraNames=[];
 let sel=null, mode='view', pick=new Set(), rate=0, armed=null, pNew=null, pRemove=false;
 const purl=(id,w)=>'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w'+w;
+// 写真を小さくして JPEG にする。iPhone は使い終わったキャンバスを解放しないと
+// メモリ上限に達して空の画像を返すことがあるので、毎回幅0にして解放する
 async function shrink(file,max,q){const own=typeof file!=='string', url=own?URL.createObjectURL(file):file;
+  let c=null;
   try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('img'));i.src=url});
-    const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
-    const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*s);c.height=Math.round(img.naturalHeight*s);
-    c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q||0.82)}
-  finally{if(own)URL.revokeObjectURL(url)}}
+    const w0=img.naturalWidth,h0=img.naturalHeight;if(!w0||!h0)throw new Error('img');
+    let s=Math.min(1,max/Math.max(w0,h0));
+    s=Math.min(s,Math.sqrt(4000000/(w0*h0)));          // 画素数も400万までにおさえる
+    c=document.createElement('canvas');c.width=Math.max(1,Math.round(w0*s));c.height=Math.max(1,Math.round(h0*s));
+    const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);
+    const out=c.toDataURL('image/jpeg',q||0.82);
+    if(!out||out.length<1000||out.indexOf('data:image/jpeg')!==0)throw new Error('canvas');
+    return out}
+  finally{if(c){c.width=0;c.height=0}if(own)URL.revokeObjectURL(url)}}
 
 function h(t,a,...k){const e=document.createElement(t);
   if(a)for(const[x,v]of Object.entries(a)){if(v==null||v===false)continue;
@@ -318,7 +326,7 @@ function renderLog(){
 function openSheet(id){sel=id;mode='view';armed=null;renderSheet();show()}
 function openNew(){sel=null;mode='edit';armed=null;pNew=null;pRemove=false;renderSheet();show();setTimeout(()=>$('fT')&&$('fT').focus(),50)}
 function show(){$('sheet').hidden=false;$('scrim').hidden=false;$('sheet').scrollTop=0}
-function closeSheet(){$('sheet').hidden=true;$('scrim').hidden=true;sel=null;mode='view'}
+function closeSheet(){readSeq++;reading=false;$('sheet').hidden=true;$('scrim').hidden=true;sel=null;mode='view'}
 $('scrim').onclick=closeSheet;
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('sheet').hidden)closeSheet()});
 $('addBtn').onclick=openNew;
@@ -420,7 +428,10 @@ function readerBox(){
   const photoIn=h('input',{type:'file',id:'rPh',accept:'image/*',multiple:true,class:'vh',onchange:async e=>{
     const fs=[...(e.target.files||[])].slice(0,5);e.target.value='';if(!fs.length)return;
     rmsg(fs.length>1?`写真${fs.length}枚を準備中…`:'写真を準備中…');
-    const list=[];for(const f of fs){try{list.push((await shrink(f,fs.length>3?1800:2400,0.9)).split(',')[1])}catch(err){}}
+    const list=[];let bad=0;
+    for(let i=0;i<fs.length;i++){rmsg(`写真を準備中…（${i+1}/${fs.length}）`);
+      try{list.push((await shrink(fs[i],fs.length>2?1600:2000,0.85)).split(',')[1])}catch(err){bad++}}
+    if(bad&&list.length)rmsg(`${bad}枚は読み込めなかったので、残りの${list.length}枚で読み取ります。`);
     if(!list.length){rmsg('この写真は読み込めませんでした。別の写真を選んでください。','err');return}
     readWith('readRecipePhotos',list,(list.length>1?`写真${list.length}枚`:'写真')+'を読み取り中…（10〜30秒ほどかかります）')}});
   return h('div',{class:'reader'},
@@ -437,14 +448,27 @@ function readerBox(){
 function readText(){const v=$('rTxt').value.trim();if(v.length<10){rmsg('レシピの部分の文章を貼り付けてください。','err');return}
   readWith('readRecipeText',v,'文章を読み取り中…')}
 function rmsg(s,cls){const m=$('rM');if(m){m.textContent=s;m.className='rmsg'+(cls?' '+cls:'')}}
-function readUrl(){const u=$('rUrl').value.trim();if(!/^https?:\/\//i.test(u)){rmsg('https:// で始まるURLを貼ってください。','err');return}
+function readUrl(){const raw=$('rUrl').value;
+  // 共有ボタンからコピーすると「料理名 https://…」のように文字がつくので、URLの部分だけ取り出す
+  const m=raw.match(/https?:\/\/[^\s<>"'「」（）()]+/i);
+  if(!m){rmsg('URLが見つかりません。https:// で始まるURLを貼ってください。','err');return}
+  const u=m[0].replace(/[、。．,.]+$/,'');$('rUrl').value=u;
   readWith('readRecipeUrl',u,'ページを読み取り中…')}
-async function readWith(fn,arg,msg){if(reading)return;reading=true;
-  ['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=true));rmsg(msg);
-  try{const r=await api(fn,arg);if(mode!=='edit')return;fillForm(r);
+let readSeq=0;
+async function readWith(fn,arg,msg){if(reading)return;reading=true;const my=++readSeq;
+  ['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=true));
+  const t0=Date.now();rmsg(msg);
+  const tick=setInterval(()=>{if(my===readSeq)rmsg(msg+'（'+Math.round((Date.now()-t0)/1000)+'秒）')},1000);
+  const LIMIT=100000;
+  try{
+    const r=await Promise.race([api(fn,arg),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),LIMIT))]);
+    if(my!==readSeq||mode!=='edit')return;
+    await fillForm(r);
     rmsg(r.source==='page'?'ページのレシピ情報を読み取りました。内容を確認してください。':'AIで読み取りました。分量などが合っているか確認してください。','ok')}
-  catch(e){rmsg(e.message==='nourl'?'保存先が設定されていません（config.js）。':'読み取れませんでした（'+String(e&&e.message||e).slice(0,120)+'）','err')}
-  finally{reading=false;['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=false))}}
+  catch(e){if(my!==readSeq)return;
+    rmsg(e.message==='timeout'?'時間がかかりすぎたので止めました。電波のよい場所でもう一度試すか、「文章を貼って読む」を使ってください。':
+      e.message==='nourl'?'保存先が設定されていません（config.js）。':'読み取れませんでした（'+String(e&&e.message||e).slice(0,120)+'）','err')}
+  finally{clearInterval(tick);if(my===readSeq){reading=false;['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=false))}}}
 async function fillForm(r){
   const set=(id,v)=>{const el=$(id);if(el&&v){el.value=v;el.classList.remove('filled');void el.offsetWidth;el.classList.add('filled')}};
   set('fT',r.title);set('fM',r.time);set('fS',r.serves);set('fI',r.ings);set('fP',r.steps);set('fU',r.url);
