@@ -248,16 +248,33 @@ function knownNames(){const s=new Set(extraNames);cooks.forEach(c=>splitWho(c.wh
 
 // ---------- サーバー呼び出し（Google Apps Script） ----------
 const API_URL=(window.API_URL||'').trim();
+// 1回の送信。返事がないまま待ち続けないよう、時間を区切る
+async function post1(obj,ms){const ac=new AbortController();const tm=setTimeout(()=>ac.abort(),ms);const t0=Date.now();
+  try{const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(obj),signal:ac.signal});
+    let j;try{j=await r.json()}catch(e){throw new Error('保存先から正しい返事がありません。Code.gs を貼り替えて新バージョンでデプロイしたか確認してください')}
+    if(!j.ok)throw new Error(j.error||'error');return j.result}
+  catch(e){if(e.name==='AbortError')throw new Error('保存先から返事がありませんでした［'+Math.round((Date.now()-t0)/1000)+'秒］');
+    if(e instanceof TypeError)throw new Error('保存先から返事がありませんでした［'+Math.round((Date.now()-t0)/1000)+'秒・'+String(e.message).slice(0,60)+'］');throw e}
+  finally{clearTimeout(tm)}}
+let onSendProgress=null;
 async function api(fn,...args){
   if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(API_URL))throw new Error('nourl');
-  let r;const t0=Date.now();
-  try{
-    if(fn==='getAll')r=await fetch(API_URL+'?action=list&t='+Date.now(),{cache:'no-store'});
-    else r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:fn,args})});
-  }catch(e){throw new Error('保存先から返事がありませんでした［'+Math.round((Date.now()-t0)/1000)+'秒・'+String(e&&e.message||e).slice(0,60)+'］')}
-  let j;try{j=await r.json()}catch(e){throw new Error('保存先から正しい返事がありません。Code.gs を貼り替えて新バージョンでデプロイしたか確認してください')}
-  if(!j.ok)throw new Error(j.error||'error');
-  return j.result;
+  if(fn==='getAll'){let r;try{r=await fetch(API_URL+'?action=list&t='+Date.now(),{cache:'no-store'})}catch(e){throw new Error('通信できませんでした。電波を確認してください')}
+    let j;try{j=await r.json()}catch(e){throw new Error('保存先から正しい返事がありません')}
+    if(!j.ok)throw new Error(j.error||'error');return j.result}
+  const body=JSON.stringify({action:fn,args});
+  const slow=/^read/.test(fn)?190000:60000;
+  if(body.length<=30000)return post1({action:fn,args},slow);
+  // 写真など大きいデータは3万文字ずつに分けて送る（スマホで大きな送信が止まる対策）
+  const id=Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+  const n=Math.ceil(body.length/30000);
+  for(let i=0;i<n;i++){
+    onSendProgress&&onSendProgress(i+1,n);
+    const piece={action:'chunk',id,i,s:body.slice(i*30000,(i+1)*30000)};
+    try{await post1(piece,30000)}catch(e){await post1(piece,30000)}   // 失敗したら1回だけやり直す
+  }
+  onSendProgress&&onSendProgress(0,n);
+  return post1({action:'chunked',id,n},slow);
 }
 function errText(e){const m=String(e&&e.message||e||'');
   return m==='nourl'?'保存先が設定されていません（config.js）。':'保存できませんでした（'+m.slice(0,120)+'）'}
@@ -458,7 +475,8 @@ let readSeq=0;
 async function readWith(fn,arg,msg){if(reading)return;reading=true;const my=++readSeq;
   ['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=true));
   const t0=Date.now();rmsg(msg);
-  const tick=setInterval(()=>{if(my===readSeq)rmsg(msg+'（'+Math.round((Date.now()-t0)/1000)+'秒）')},1000);
+  let stage='';onSendProgress=(i,n)=>{stage=i?`送信中 ${i}/${n}・`:''};
+  const tick=setInterval(()=>{if(my===readSeq)rmsg(msg+'（'+stage+Math.round((Date.now()-t0)/1000)+'秒）')},1000);
   const LIMIT=200000;
   try{
     const r=await Promise.race([api(fn,arg),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),LIMIT))]);
@@ -468,7 +486,7 @@ async function readWith(fn,arg,msg){if(reading)return;reading=true;const my=++re
   catch(e){if(my!==readSeq)return;
     rmsg(e.message==='timeout'?'時間がかかりすぎたので止めました。AIが混み合っている可能性があります。少し時間をおくか、写真の枚数を減らして試してください。':
       e.message==='nourl'?'保存先が設定されていません（config.js）。':'読み取れませんでした（'+String(e&&e.message||e).slice(0,120)+'）','err')}
-  finally{clearInterval(tick);if(my===readSeq){reading=false;['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=false))}}}
+  finally{clearInterval(tick);onSendProgress=null;if(my===readSeq){reading=false;['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=false))}}}
 async function fillForm(r){
   const set=(id,v)=>{const el=$(id);if(el&&v){el.value=v;el.classList.remove('filled');void el.offsetWidth;el.classList.add('filled')}};
   set('fT',r.title);set('fM',r.time);set('fS',r.serves);set('fI',r.ings);set('fP',r.steps);set('fU',r.url);
