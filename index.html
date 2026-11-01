@@ -268,11 +268,13 @@ async function api(fn,...args){
   // 写真など大きいデータは3万文字ずつに分けて送る（スマホで大きな送信が止まる対策）
   const id=Date.now().toString(36)+Math.random().toString(36).slice(2,10);
   const n=Math.ceil(body.length/30000);
-  for(let i=0;i<n;i++){
-    onSendProgress&&onSendProgress(i+1,n);
+  // 4つずつ同時に送る（順番に送るより速い）
+  let done=0,next=0;onSendProgress&&onSendProgress(1,n);
+  const worker=async()=>{while(next<n){const i=next++;
     const piece={action:'chunk',id,i,s:body.slice(i*30000,(i+1)*30000)};
     try{await post1(piece,30000)}catch(e){await post1(piece,30000)}   // 失敗したら1回だけやり直す
-  }
+    done++;onSendProgress&&onSendProgress(Math.min(done+1,n),n)}};
+  await Promise.all(Array.from({length:Math.min(4,n)},worker));
   onSendProgress&&onSendProgress(0,n);
   return post1({action:'chunked',id,n},slow);
 }
@@ -447,7 +449,7 @@ function readerBox(){
     rmsg(fs.length>1?`写真${fs.length}枚を準備中…`:'写真を準備中…');
     const list=[];let bad=0;
     for(let i=0;i<fs.length;i++){rmsg(`写真を準備中…（${i+1}/${fs.length}）`);
-      try{list.push((await shrink(fs[i],fs.length>2?1600:2000,0.85)).split(',')[1])}catch(err){bad++}}
+      try{list.push((await shrink(fs[i],fs.length>2?1500:1800,0.8)).split(',')[1])}catch(err){bad++}}
     if(bad&&list.length)rmsg(`${bad}枚は読み込めなかったので、残りの${list.length}枚で読み取ります。`);
     if(!list.length){rmsg('この写真は読み込めませんでした。別の写真を選んでください。','err');return}
     readWith('readRecipePhotos',list,(list.length>1?`写真${list.length}枚`:'写真')+'を読み取り中…（10〜30秒ほどかかります）')}});
