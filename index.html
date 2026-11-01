@@ -268,13 +268,12 @@ async function api(fn,...args){
   // 写真など大きいデータは3万文字ずつに分けて送る（スマホで大きな送信が止まる対策）
   const id=Date.now().toString(36)+Math.random().toString(36).slice(2,10);
   const n=Math.ceil(body.length/30000);
-  // 4つずつ同時に送る（順番に送るより速い）
-  let done=0,next=0;onSendProgress&&onSendProgress(1,n);
-  const worker=async()=>{while(next<n){const i=next++;
+  // 1つずつ順番に送る（スマホでは同時に送ると止まることがあるため）
+  for(let i=0;i<n;i++){
+    onSendProgress&&onSendProgress(i+1,n);
     const piece={action:'chunk',id,i,s:body.slice(i*30000,(i+1)*30000)};
     try{await post1(piece,30000)}catch(e){await post1(piece,30000)}   // 失敗したら1回だけやり直す
-    done++;onSendProgress&&onSendProgress(Math.min(done+1,n),n)}};
-  await Promise.all(Array.from({length:Math.min(4,n)},worker));
+  }
   onSendProgress&&onSendProgress(0,n);
   return post1({action:'chunked',id,n},slow);
 }
