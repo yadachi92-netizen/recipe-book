@@ -250,11 +250,11 @@ function knownNames(){const s=new Set(extraNames);cooks.forEach(c=>splitWho(c.wh
 const API_URL=(window.API_URL||'').trim();
 async function api(fn,...args){
   if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(API_URL))throw new Error('nourl');
-  let r;
+  let r;const t0=Date.now();
   try{
     if(fn==='getAll')r=await fetch(API_URL+'?action=list&t='+Date.now(),{cache:'no-store'});
     else r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:fn,args})});
-  }catch(e){throw new Error('通信できませんでした。電波を確認してください')}
+  }catch(e){throw new Error('保存先から返事がありませんでした［'+Math.round((Date.now()-t0)/1000)+'秒・'+String(e&&e.message||e).slice(0,60)+'］')}
   let j;try{j=await r.json()}catch(e){throw new Error('保存先から正しい返事がありません。Code.gs を貼り替えて新バージョンでデプロイしたか確認してください')}
   if(!j.ok)throw new Error(j.error||'error');
   return j.result;
