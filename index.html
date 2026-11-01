@@ -459,14 +459,14 @@ async function readWith(fn,arg,msg){if(reading)return;reading=true;const my=++re
   ['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=true));
   const t0=Date.now();rmsg(msg);
   const tick=setInterval(()=>{if(my===readSeq)rmsg(msg+'（'+Math.round((Date.now()-t0)/1000)+'秒）')},1000);
-  const LIMIT=100000;
+  const LIMIT=200000;
   try{
     const r=await Promise.race([api(fn,arg),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),LIMIT))]);
     if(my!==readSeq||mode!=='edit')return;
     await fillForm(r);
     rmsg(r.source==='page'?'ページのレシピ情報を読み取りました。内容を確認してください。':'AIで読み取りました。分量などが合っているか確認してください。','ok')}
   catch(e){if(my!==readSeq)return;
-    rmsg(e.message==='timeout'?'時間がかかりすぎたので止めました。電波のよい場所でもう一度試すか、「文章を貼って読む」を使ってください。':
+    rmsg(e.message==='timeout'?'時間がかかりすぎたので止めました。AIが混み合っている可能性があります。少し時間をおくか、写真の枚数を減らして試してください。':
       e.message==='nourl'?'保存先が設定されていません（config.js）。':'読み取れませんでした（'+String(e&&e.message||e).slice(0,120)+'）','err')}
   finally{clearInterval(tick);if(my===readSeq){reading=false;['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=false))}}}
 async function fillForm(r){
