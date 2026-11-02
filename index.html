@@ -150,6 +150,14 @@ footer{font-size:12px;color:var(--muted);line-height:1.7}
 .vh{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none}
 .vh:focus-visible+.pfield label.btn{outline:2px solid var(--ink);outline-offset:2px}
 label.btn{display:inline-block}
+.shots{display:flex;gap:8px;flex-wrap:wrap}
+.shot{position:relative;width:76px;height:120px;border-radius:8px;overflow:hidden;background:var(--soft);border:1px solid var(--rule);flex:none;padding:0;cursor:pointer}
+.shot img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.shot .rm{position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:13px;line-height:24px;cursor:pointer;padding:0}
+.shot.new::after{content:"未保存";position:absolute;left:0;right:0;bottom:0;font-size:10px;text-align:center;background:rgba(0,0,0,.55);color:#fff;padding:1px 0}
+.viewer{position:fixed;inset:0;z-index:30;background:rgba(5,8,7,.92);overflow-y:auto;padding:calc(56px + env(safe-area-inset-top,0px)) 12px calc(24px + env(safe-area-inset-bottom,0px))}
+.viewer img{display:block;width:100%;max-width:720px;margin:0 auto 12px;border-radius:8px;background:#222}
+.viewer .vx{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:12px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.9);color:#000;font-size:18px;cursor:pointer;z-index:31}
 .reader{background:var(--soft);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
 .reader .rh{font-size:13px;font-weight:700}
 .reader .rh small{font-weight:500;color:var(--muted);margin-left:6px}
@@ -216,7 +224,7 @@ const CATS=[['主菜','主','#C8553D'],['副菜','副','#3F8F55'],['汁物','汁
 const catOf=n=>CATS.find(c=>c[0]===n)||CATS[5];
 const $=id=>document.getElementById(id);
 let recipes=new Map(), cooks=new Map(), byR=new Map(), filterCat=null, busy=false, online=false, extraNames=[];
-let sel=null, mode='view', pick=new Set(), rate=0, armed=null, pNew=null, pRemove=false;
+let sel=null, mode='view', pick=new Set(), rate=0, armed=null, pNew=null, pRemove=false, shotsKeep=[], shotsNew=[];
 const purl=(id,w)=>'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w'+w;
 // 写真を小さくして JPEG にする。iPhone は使い終わったキャンバスを解放しないと
 // メモリ上限に達して空の画像を返すことがあるので、毎回幅0にして解放する
@@ -326,6 +334,7 @@ function card(id,r){const c=catOf(r.cat), cs=byR.get(id)||[], av=avgRate(cs);
   if(r.serves)info.push(h('span',null,h('span',{class:'num'},r.serves),'人分'));
   info.push(cs.length?h('span',{class:'pill made'},`${cs.length}回`):h('span',{class:'pill'},'まだ'));
   if(cs.length)info.push(h('span',null,'最後 ',h('span',{class:'num'},md(cs[0].date))));
+  if((r.shots||[]).length)info.push(h('span',{class:'pill'},`メモ画像 ${r.shots.length}`));
   if(av)info.push(h('span',{class:'stars','aria-label':`おいしさ ${av}/3`},stars(av)));
   return h('button',{type:'button',class:'card',style:`--lc:${c[2]}`,onclick:()=>openSheet(id)},
     h('span',{class:'badge','aria-hidden':'true'},c[1]),h('span',{class:'ttl'},r.title||'（名前なし）'),h('span',{class:'info'},info),
@@ -342,7 +351,7 @@ function renderLog(){
 
 // ---------- シート ----------
 function openSheet(id){sel=id;mode='view';armed=null;renderSheet();show()}
-function openNew(){sel=null;mode='edit';armed=null;pNew=null;pRemove=false;renderSheet();show();setTimeout(()=>$('fT')&&$('fT').focus(),50)}
+function openNew(){sel=null;mode='edit';armed=null;pNew=null;pRemove=false;shotsKeep=[];shotsNew=[];renderSheet();show();setTimeout(()=>$('fT')&&$('fT').focus(),50)}
 function show(){$('sheet').hidden=false;$('scrim').hidden=false;$('sheet').scrollTop=0}
 function closeSheet(){readSeq++;reading=false;$('sheet').hidden=true;$('scrim').hidden=true;sel=null;mode='view'}
 $('scrim').onclick=closeSheet;
@@ -370,13 +379,16 @@ function detailView(){const r=recipes.get(sel), cs=byR.get(sel)||[], c=catOf(r.c
     h('div',{class:'state'+(cs.length?' on':'')},cs.length?`作った ${cs.length} 回・最後 ${cs[0].date||'日付なし'}`:'まだ作っていないレシピ'),
     h('div',{class:'btns'},
       h('button',{class:'btn',type:'button',disabled:!online,onclick:()=>{mode='cook';pick=new Set(cs.length?splitWho(cs[0].who):knownNames());rate=0;renderSheet()}},'作った！と記録'),
-      h('button',{class:'btn ghost',type:'button',disabled:!online,onclick:()=>{mode='edit';armed=null;pNew=null;pRemove=false;renderSheet()}},'編集'))];
+      h('button',{class:'btn ghost',type:'button',disabled:!online,onclick:()=>{mode='edit';armed=null;pNew=null;pRemove=false;shotsKeep=(r.shots||[]).slice();shotsNew=[];renderSheet()}},'編集'))];
   if(r.photo)out.splice(1,0,h('img',{class:'hero',src:purl(r.photo,1200),alt:(r.title||'料理')+'の写真',onerror:e=>e.target.remove()}));
   const ings=lines(r.ings), steps=lines(r.steps);
   if(ings.length||steps.length)out.push(h('div',{class:'cols'},
     h('div',{class:'sec'},h('h3',null,'材料'+(r.serves?`（${r.serves}人分）`:'')),ings.length?ingList(r.ings):h('div',{class:'empty'},'未入力')),
     h('div',{class:'sec'},h('h3',null,'作り方'),steps.length?h('ol',{class:'steps'},steps.map(s=>/^[■□]/.test(s)?h('li',{class:'shdr'},s.replace(/^[■□]\s*/,'')):h('li',null,h('span',null,s)))):h('div',{class:'empty'},'未入力'))));
   if(r.memo)out.push(h('div',{class:'sec'},h('h3',null,'メモ'),h('div',{class:'memo'},r.memo)));
+  if((r.shots||[]).length)out.push(h('div',{class:'sec'},h('h3',null,`メモ画像（${r.shots.length}枚）`),
+    h('div',{class:'shots'},r.shots.map((id,i)=>h('button',{type:'button',class:'shot','aria-label':`メモ画像 ${i+1}を大きく見る`,onclick:()=>openViewer(r.shots.map(x=>purl(x,2000)),i)},
+      h('img',{src:purl(id,300),alt:'',loading:'lazy'}))))));
   if(/^https?:\/\//i.test(r.url||''))out.push(h('div',{class:'src'},'参考：',h('a',{href:r.url,target:'_blank',rel:'noopener'},r.url)));
   out.push(h('div',{class:'sec'},h('h3',null,'作った記録'),cs.length?h('ol',{class:'hist'},cs.map(x=>h('li',null,
     h('span',{class:'d'},x.date||''),
@@ -426,6 +438,7 @@ function editView(){const r=sel?recipes.get(sel):{cat:filterCat||'主菜'};
       readerBox(),
       h('div',{class:'f'},h('label',{for:'fT'},'料理名'),h('input',{id:'fT',required:true,maxlength:80,value:r.title||'',placeholder:'例：鶏もも肉の照り焼き'})),
       h('div',{class:'f'},h('span',{class:'flab'},'写真'),fileIn,pv),
+      shotsField(),
       h('div',{class:'frow'},
         h('div',{class:'f'},h('label',{for:'fC'},'種類'),h('select',{id:'fC'},opt)),
         h('div',{class:'f'},h('label',{for:'fM'},'時間（分）'),h('input',{id:'fM',type:'number',min:0,max:999,inputmode:'numeric',value:r.time||''})),
@@ -440,6 +453,34 @@ function editView(){const r=sel?recipes.get(sel):{cat:filterCat||'主菜'};
         sel?h('button',{class:'btn warn',type:'button',id:'fDel',onclick:delRecipe},'このレシピを削除'):null),
       h('div',{class:'msg',id:'shM'}))]}
 
+// ---------- メモ画像（スクショ） ----------
+let keptForShots=null;
+function shotsField(){
+  const wrap=h('div',{class:'shots',id:'shotList'});
+  const draw=()=>{wrap.replaceChildren(
+    ...shotsKeep.map((id,i)=>h('div',{class:'shot'},h('img',{src:purl(id,300),alt:`メモ画像 ${i+1}`}),
+      h('button',{type:'button',class:'rm','aria-label':'このメモ画像を外す',onclick:()=>{shotsKeep.splice(i,1);draw()}},'✕'))),
+    ...shotsNew.map((u,i)=>h('div',{class:'shot new'},h('img',{src:u,alt:'追加するメモ画像'}),
+      h('button',{type:'button',class:'rm','aria-label':'このメモ画像を外す',onclick:()=>{shotsNew.splice(i,1);draw()}},'✕'))));
+    $('shotEmpty')&&($('shotEmpty').hidden=shotsKeep.length+shotsNew.length>0)};
+  const inp=h('input',{type:'file',id:'fShot',accept:'image/*',multiple:true,class:'vh',onchange:async e=>{
+    const fs=[...(e.target.files||[])].slice(0,10);e.target.value='';if(!fs.length)return;
+    for(let i=0;i<fs.length;i++){$('shM').textContent=`メモ画像を準備中…（${i+1}/${fs.length}）`;
+      try{shotsNew.push(await shrink(fs[i],1800,0.8))}catch(err){}}
+    $('shM').textContent='';draw()}});
+  inp.addEventListener('redraw',draw);
+  setTimeout(draw,0);
+  return h('div',{class:'f'},h('span',{class:'flab'},'メモ画像（スクショなど・何枚でも）'),inp,wrap,
+    h('div',{class:'btns'},h('label',{class:'btn ghost',for:'fShot'},'スクショを追加'),
+      h('span',{class:'hint',id:'shotEmpty'},'インスタの投稿や材料メモのスクショを、そのまま残しておけます')))}
+function openViewer(urls,start){
+  const v=h('div',{class:'viewer',role:'dialog','aria-label':'メモ画像'},
+    h('button',{type:'button',class:'vx','aria-label':'閉じる',onclick:()=>v.remove()},'✕'),
+    urls.map(u=>h('img',{src:u,alt:'メモ画像'})));
+  document.body.append(v);
+  const imgs=v.querySelectorAll('img');if(imgs[start])setTimeout(()=>imgs[start].scrollIntoView(),50);
+  const esc=e=>{if(e.key==='Escape'){v.remove();document.removeEventListener('keydown',esc)}};document.addEventListener('keydown',esc)}
+
 // ---------- 自動読み取り ----------
 let reading=false;
 function readerBox(){
@@ -451,6 +492,7 @@ function readerBox(){
       try{list.push((await shrink(fs[i],fs.length>2?1500:1800,0.8)).split(',')[1])}catch(err){bad++}}
     if(bad&&list.length)rmsg(`${bad}枚は読み込めなかったので、残りの${list.length}枚で読み取ります。`);
     if(!list.length){rmsg('この写真は読み込めませんでした。別の写真を選んでください。','err');return}
+    if(mode==='edit'){keptForShots=list.map(b=>'data:image/jpeg;base64,'+b)}
     readWith('readRecipePhotos',list,(list.length>1?`写真${list.length}枚`:'写真')+'を読み取り中…（10〜30秒ほどかかります）')}});
   return h('div',{class:'reader'},
     h('div',{class:'rh'},'自動で読み取る',h('small',null,'読み取った内容は下の欄に入ります。直してから保存してください')),
@@ -483,11 +525,12 @@ async function readWith(fn,arg,msg){if(reading)return;reading=true;const my=++re
     const r=await Promise.race([api(fn,arg),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),LIMIT))]);
     if(my!==readSeq||mode!=='edit')return;
     await fillForm(r);
+    if(keptForShots&&fn==='readRecipePhotos'){shotsNew.push(...keptForShots);$('fShot')&&$('fShot').dispatchEvent(new Event('redraw'))}
     rmsg(r.source==='page'?'ページのレシピ情報を読み取りました。内容を確認してください。':'AIで読み取りました。分量などが合っているか確認してください。','ok')}
   catch(e){if(my!==readSeq)return;
     rmsg(e.message==='timeout'?'時間がかかりすぎたので止めました。AIが混み合っている可能性があります。少し時間をおくか、写真の枚数を減らして試してください。':
       e.message==='nourl'?'保存先が設定されていません（config.js）。':'読み取れませんでした（'+String(e&&e.message||e).slice(0,120)+'）','err')}
-  finally{clearInterval(tick);onSendProgress=null;if(my===readSeq){reading=false;['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=false))}}}
+  finally{keptForShots=null;clearInterval(tick);onSendProgress=null;if(my===readSeq){reading=false;['rUrlB','rTxtB','fSave'].forEach(i=>$(i)&&($(i).disabled=false))}}}
 async function fillForm(r){
   const set=(id,v)=>{const el=$(id);if(el&&v){el.value=v;el.classList.remove('filled');void el.offsetWidth;el.classList.add('filled')}};
   set('fT',r.title);set('fM',r.time);set('fS',r.serves);set('fI',r.ings);set('fP',r.steps);set('fU',r.url);
@@ -498,12 +541,12 @@ async function fillForm(r){
 }
 
 // ---------- 保存 ----------
-async function run(btn,fn,args,after){btn.disabled=true;$('shM').textContent=args[0]&&args[0].photoData?'写真を保存中…（少しかかります）':'保存中…';busy=true;
+async function run(btn,fn,args,after){btn.disabled=true;$('shM').textContent=args[0]&&(args[0].photoData||(args[0].shotsNew||[]).length)?'写真を保存中…（少しかかります）':'保存中…';busy=true;
   try{const d=await api(fn,...args);busy=false;after&&after(d);apply(d)}
   catch(e){busy=false;btn.disabled=false;$('shM').textContent=errText(e)}}
 function saveRecipe(){const t=$('fT').value.trim();if(!t){$('shM').textContent='料理名を入れてください。';return}
-  const rec={id:sel||'',title:t,cat:$('fC').value,time:$('fM').value,serves:$('fS').value,ings:$('fI').value.trim(),steps:$('fP').value.trim(),memo:$('fN').value.trim(),url:$('fU').value.trim(),photoData:pNew?pNew.split(',')[1]:'',photoRemove:pRemove};
-  run($('fSave'),'saveRecipe',[rec],d=>{sel=d.savedId||sel;mode='view';pNew=null;pRemove=false})}
+  const rec={id:sel||'',title:t,cat:$('fC').value,time:$('fM').value,serves:$('fS').value,ings:$('fI').value.trim(),steps:$('fP').value.trim(),memo:$('fN').value.trim(),url:$('fU').value.trim(),photoData:pNew?pNew.split(',')[1]:'',photoRemove:pRemove,shotsKeep:shotsKeep.slice(),shotsNew:shotsNew.map(s=>s.split(',')[1])};
+  run($('fSave'),'saveRecipe',[rec],d=>{sel=d.savedId||sel;mode='view';pNew=null;pRemove=false;shotsKeep=[];shotsNew=[]})}
 function saveCook(){if(!sel)return;
   run($('cSave'),'addCook',[{rid:sel,date:$('cD').value||today(),who:[...pick].join('、'),rate:rate||0,note:$('cN').value.trim().slice(0,500)}],()=>{mode='view'})}
 function delCook(id){if(armed!==id){armed=id;renderSheet();return}
